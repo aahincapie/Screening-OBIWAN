@@ -13,13 +13,40 @@ Three entry paths, tried in order:
    normal path for local use.
 2. **Environment / secrets service account** — if ``EE_SERVICE_ACCOUNT_JSON`` is set,
    use it. Present for CI and headless deployments only; not the default.
-3. **Interactive OAuth** — the app renders a Google consent URL, the user pastes back
-   the authorization code, and the resulting refresh token is written to the standard
-   Earth Engine credentials location for reuse.
+3. **Interactive OAuth** — the app renders a Google consent URL and the user pastes
+   back the authorization code. Locally the resulting refresh token is written to the
+   standard Earth Engine credentials location for reuse; **on a shared host it is
+   never written to disk** (see below).
 
 The OAuth helpers in ``ee.oauth`` have shifted across ``earthengine-api`` releases, so
 every call here is defensive and degrades to an actionable error message rather than a
 traceback.
+
+.. warning::
+   **Multi-user hosting and Earth Engine's global state**
+
+   ``earthengine-api`` stores its session in *process-global* state: ``ee.Initialize``
+   sets a module-level default used by every subsequent call in that process. Streamlit
+   Community Cloud runs one process serving all visitors concurrently.
+
+   Two consequences, both handled here:
+
+   1. **Never persist an OAuth token on a shared host.** Writing a refresh token to the
+      container's credentials file would let the next visitor initialise as the
+      previous one and spend their quota. :func:`is_hosted` detects the environment and
+      :func:`complete_authorization` holds credentials in memory instead, for the
+      caller to keep in per-session state.
+   2. **Re-initialise before every operation.** :func:`activate` re-binds the global
+      session to the current visitor's credentials immediately before their analysis
+      runs, so a second visitor signing in cannot silently redirect the first
+      visitor's in-flight requests.
+
+   Step 2 narrows the window but does not close it. Two visitors running analyses at
+   the same instant can still interleave between ``activate`` and the Earth Engine
+   calls that follow, because the shared global cannot represent two identities at
+   once. **A public multi-user deployment should use a service account**
+   (``EE_SERVICE_ACCOUNT_JSON``), where one identity is the correct model. Per-user
+   OAuth is safe for local use and for a private, single-operator deployment.
 """
 
 from __future__ import annotations
@@ -49,6 +76,42 @@ class AuthState:
     project_id: str = ""
     method: str = ""          # "stored" | "service_account" | "oauth"
     message: str = ""
+    credentials: object = None
+    """In-memory credentials when running hosted, where nothing is written to disk.
+    The caller keeps this in per-session state and passes it back to :func:`activate`
+    before each operation. ``None`` locally, where the token is persisted normally."""
+
+
+# ---------------------------------------------------------------------------
+# Environment detection
+# ---------------------------------------------------------------------------
+
+def is_hosted() -> bool:
+    """True when running on a shared multi-user host rather than a local machine.
+
+    Persisting an OAuth refresh token is safe locally (one operator, one machine) and
+    unsafe on a shared host (one process, many visitors). Detection is heuristic and
+    deliberately **fails safe**: an unrecognised container is treated as hosted, so the
+    worst case is a user re-authenticating rather than a leaked credential.
+    """
+    if os.environ.get("SCREENING_OBIWAN_FORCE_LOCAL", "").lower() in ("1", "true", "yes"):
+        return False
+
+    hosted_markers = (
+        "STREAMLIT_SHARING_MODE",     # Streamlit Community Cloud
+        "STREAMLIT_SERVER_HEADLESS",  # generic headless deployment
+        "SPACE_ID",                   # Hugging Face Spaces
+        "K_SERVICE",                  # Google Cloud Run
+        "DYNO",                       # Heroku
+        "RENDER",                     # Render
+        "RAILWAY_ENVIRONMENT",        # Railway
+        "WEBSITE_INSTANCE_ID",        # Azure App Service
+    )
+    if any(os.environ.get(marker) for marker in hosted_markers):
+        return True
+
+    # Containerised without a recognised marker — assume shared.
+    return os.path.exists("/.dockerenv")
 
 
 # ---------------------------------------------------------------------------
@@ -151,41 +214,129 @@ def build_authorization_url() -> Tuple[str, str]:
         ) from exc
 
 
-def complete_authorization(code: str, code_verifier: str, project_id: str) -> AuthState:
-    """Exchange an authorization code for a refresh token and initialise.
+def _credentials_from_refresh_token(refresh_token: str):
+    """Build in-memory google-auth credentials from an Earth Engine refresh token.
 
-    The token is written to the standard Earth Engine credentials path, so subsequent
-    sessions take the ``stored`` path and never see this flow again.
+    Used on shared hosts, where writing the token to the container's credentials file
+    would expose it to every other visitor of the same process.
+    """
+    from ee import oauth  # noqa: PLC0415
+    from google.oauth2.credentials import Credentials  # noqa: PLC0415
+
+    return Credentials(
+        token=None,
+        refresh_token=refresh_token,
+        token_uri=getattr(oauth, "TOKEN_URI", "https://oauth2.googleapis.com/token"),
+        client_id=oauth.CLIENT_ID,
+        client_secret=oauth.CLIENT_SECRET,
+        scopes=list(getattr(oauth, "SCOPES", [])) or None,
+    )
+
+
+def _persist_token(oauth_module, token) -> None:
+    """Write a token using whichever writer this earthengine-api release exposes."""
+    for writer in ("write_private_key", "write_token"):
+        fn = getattr(oauth_module, writer, None)
+        if callable(fn):
+            fn(token)
+            return
+    raise EEAuthError("No token writer found in ee.oauth.")
+
+
+def complete_authorization(
+    code: str,
+    code_verifier: str,
+    project_id: str,
+    persist: Optional[bool] = None,
+) -> AuthState:
+    """Exchange an authorization code for credentials and initialise.
+
+    Parameters
+    ----------
+    persist
+        Whether to write the refresh token to the standard Earth Engine credentials
+        path. ``None`` (the default) decides from :func:`is_hosted`: persist locally,
+        never on a shared host. Passing an explicit value is intended for tests.
+
+    When the token is not persisted, the credentials are returned on
+    :attr:`AuthState.credentials` for the caller to hold in per-session state and
+    replay through :func:`activate` before each operation.
     """
     code = (code or "").strip()
     if not code:
         return AuthState(False, project_id, "oauth", "No authorization code supplied.")
 
+    if persist is None:
+        persist = not is_hosted()
+
     try:
         from ee import oauth  # noqa: PLC0415
 
         token = oauth.request_token(code, code_verifier)
-        oauth.write_private_key(token) if hasattr(oauth, "write_private_key") \
-            else oauth.write_token(token)
-    except AttributeError:
-        # Older/newer API surface: fall back to whatever token writer exists.
-        try:
-            from ee import oauth  # noqa: PLC0415
+    except Exception as exc:  # noqa: BLE001
+        return AuthState(
+            False, project_id, "oauth",
+            "Authorization failed. The code may have expired — generate a new link "
+            f"and retry. ({exc})",
+        )
 
-            oauth.write_token(oauth.request_token(code, code_verifier))
+    if persist:
+        try:
+            _persist_token(oauth, token)
         except Exception as exc:  # noqa: BLE001
             return AuthState(False, project_id, "oauth",
                              f"Could not persist the Earth Engine token: {exc}")
+
+        state = try_stored_credentials(project_id)
+        if state.initialized:
+            state.method = "oauth"
+            state.message = "Signed in. Credentials saved for future sessions."
+        return state
+
+    # Hosted: keep the credentials in memory only.
+    try:
+        refresh_token = token if isinstance(token, str) else token.get("refresh_token")
+        credentials = _credentials_from_refresh_token(refresh_token)
+        _initialize_with(credentials, project_id)
     except Exception as exc:  # noqa: BLE001
         return AuthState(False, project_id, "oauth",
-                         f"Authorization failed. The code may have expired — "
-                         f"generate a new link and retry. ({exc})")
+                         f"Signed in, but Earth Engine rejected the session: {exc}")
 
-    state = try_stored_credentials(project_id)
-    if state.initialized:
-        state.method = "oauth"
-        state.message = "Signed in. Credentials saved for future sessions."
-    return state
+    return AuthState(
+        True, project_id, "oauth",
+        "Signed in for this session only. Because this app is shared, your Earth "
+        "Engine token is held in memory and never written to the server — you will "
+        "sign in again next visit.",
+        credentials=credentials,
+    )
+
+
+def _initialize_with(credentials, project_id: str) -> None:
+    """Bind the Earth Engine global session to specific credentials, and verify it."""
+    ee.Initialize(credentials, project=project_id, opt_url=HIGH_VOLUME_ENDPOINT)
+    ee.Number(1).getInfo()
+
+
+def activate(state: AuthState) -> bool:
+    """Re-bind the global Earth Engine session to this visitor's credentials.
+
+    Call immediately before any Earth Engine work. On a single-user local run this is
+    a cheap no-op reassertion. On a shared host it is what stops visitor B's sign-in
+    from silently redirecting visitor A's in-flight analysis — see the module warning
+    for the residual concurrency caveat this cannot fix.
+    """
+    if not state or not state.initialized:
+        return False
+
+    try:
+        if state.credentials is not None:
+            _initialize_with(state.credentials, state.project_id)
+        else:
+            _initialize(state.project_id)
+        return True
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Could not re-activate the Earth Engine session: %s", exc)
+        return False
 
 
 # ---------------------------------------------------------------------------

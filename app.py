@@ -42,6 +42,7 @@ st.set_page_config(
 def init_state() -> None:
     defaults = {
         "ee_ready": False,
+        "ee_state": None,
         "ee_project_id": "",
         "oauth_verifier": "",
         "aoi": None,
@@ -62,13 +63,24 @@ def render_auth_gate() -> bool:
     if st.session_state.ee_ready:
         return True
 
+    hosted = ee_auth.is_hosted()
+
     st.markdown("## Connect to Earth Engine")
-    st.markdown(
-        "This tool reads Hansen Global Forest Change and GEDI biomass data through "
-        "**your** Earth Engine account, so quota and usage stay with you. Nothing is "
-        "shared, and no credentials are stored by this app beyond your machine's "
-        "standard Earth Engine credentials file."
-    )
+    if hosted:
+        st.markdown(
+            "This tool reads Hansen Global Forest Change and GEDI biomass data through "
+            "**your** Earth Engine account, so quota and usage stay with you.\n\n"
+            "Because this is a shared deployment, your sign-in lasts **for this session "
+            "only** — the token is held in memory and never written to the server. You "
+            "will sign in again on your next visit."
+        )
+    else:
+        st.markdown(
+            "This tool reads Hansen Global Forest Change and GEDI biomass data through "
+            "**your** Earth Engine account, so quota and usage stay with you. Nothing is "
+            "shared, and no credentials are stored by this app beyond your machine's "
+            "standard Earth Engine credentials file."
+        )
 
     project_id = st.text_input(
         "Earth Engine Cloud project ID",
@@ -89,19 +101,25 @@ def render_auth_gate() -> bool:
             state = ee_auth.initialize(project_id)
         if state.initialized:
             st.session_state.ee_ready = True
+            st.session_state.ee_state = state
             st.success(state.message)
             st.rerun()
         else:
             st.error(ee_auth.describe_failure(state.message))
             st.session_state.analysis_error = state.message
 
-    with st.expander("Not connecting? Sign in interactively"):
-        st.markdown(
-            "The quickest fix is usually a one-off terminal command:\n\n"
-            "```\nearthengine authenticate\n```\n\n"
-            "Reload this page afterwards. If you cannot use a terminal, use the "
-            "browser flow below instead."
-        )
+    with st.expander("Sign in with Google", expanded=hosted):
+        if hosted:
+            st.markdown(
+                "Authorise Earth Engine below. Nothing is stored on the server."
+            )
+        else:
+            st.markdown(
+                "The quickest fix is usually a one-off terminal command:\n\n"
+                "```\nearthengine authenticate\n```\n\n"
+                "Reload this page afterwards. If you cannot use a terminal, use the "
+                "browser flow below instead."
+            )
 
         if st.button("Generate sign-in link"):
             try:
@@ -119,6 +137,7 @@ def render_auth_gate() -> bool:
             )
             if state.initialized:
                 st.session_state.ee_ready = True
+                st.session_state.ee_state = state
                 st.rerun()
             else:
                 st.error(state.message)
@@ -604,6 +623,17 @@ def main() -> None:
 
         def progress(label: str, fraction: float) -> None:
             progress_bar.progress(min(fraction, 1.0), text=label)
+
+        # Re-bind Earth Engine's process-global session to THIS visitor's credentials
+        # before touching the API. On a shared host another visitor may have signed in
+        # since this session authenticated, which would otherwise silently redirect
+        # these requests onto their quota. See src/ee_auth.py for the residual caveat.
+        if not ee_auth.activate(st.session_state.ee_state):
+            st.session_state.ee_ready = False
+            st.session_state.analysis_error = (
+                "Your Earth Engine session expired. Sign in again to continue."
+            )
+            st.rerun()
 
         try:
             result = pipeline.run(config, aoi, progress)

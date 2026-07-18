@@ -116,6 +116,54 @@ If `earthengine authenticate` is unavailable, the app offers a browser OAuth flo
 
 ---
 
+## Deployment
+
+### Streamlit Community Cloud (recommended)
+
+1. <https://share.streamlit.io> → **New app**
+2. Repository `aahincapie/Screening-OBIWAN`, branch `main`, main file `app.py`
+3. **Deploy**
+
+`requirements.txt`, `runtime.txt` and `.streamlit/config.toml` are already configured.
+No system packages are needed — `geopandas` and `fiona` ship GDAL in their wheels.
+
+### ⚠️ Per-user OAuth on a shared host
+
+`earthengine-api` keeps its session in **process-global** state, and Streamlit
+Community Cloud runs **one process serving every visitor**. The app handles this:
+
+- `src/ee_auth.py::is_hosted` detects a shared deployment and **never writes an OAuth
+  refresh token to disk** there — credentials are held in per-session memory only, so
+  one visitor's token cannot be picked up by the next.
+- `src/ee_auth.py::activate` re-binds the global session to the current visitor's
+  credentials immediately before their analysis runs.
+
+**This narrows the race but cannot close it.** Two visitors running analyses at the
+same instant can still interleave, because one global cannot represent two identities.
+
+| Deployment | Verdict |
+|---|---|
+| Local, single operator | ✅ Safe. Token persists normally. |
+| Private hosted, one operator | ✅ Safe in practice. |
+| Public link, concurrent users | ⚠️ Use a service account instead |
+
+For a genuinely public multi-user deployment, set `EE_SERVICE_ACCOUNT_JSON` in the
+host's secrets — one identity is the correct model there, and it is already supported.
+The trade-off is that quota and billing move to *your* GCP project.
+
+Set `SCREENING_OBIWAN_FORCE_LOCAL=1` to override detection (e.g. a private container
+you know is single-user).
+
+### Why not Vercel
+
+Vercel runs stateless serverless functions. Streamlit is a persistent, stateful
+WebSocket server. There is no configuration that reconciles the two — no WebSocket
+support, a 10–60 s execution cap against multi-minute Earth Engine calls, and a 250 MB
+bundle limit that this dependency set exceeds. Deploying to Vercel would require
+splitting the app into a React frontend plus a separately-hosted Python API.
+
+---
+
 ## Input
 
 **KML up to 1 MB**, containing polygons. KMZ, GeoJSON, GeoPackage and zipped

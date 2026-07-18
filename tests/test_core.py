@@ -329,3 +329,65 @@ def test_window_before_hansen_baseline_is_rejected():
 
 def test_default_config_is_valid():
     assert AppConfig().validate() == []
+
+
+# ---------------------------------------------------------------------------
+# Hosted-environment detection
+# ---------------------------------------------------------------------------
+# These guard a security property, not a feature: on a shared host an OAuth refresh
+# token must never reach disk, because earthengine-api's session is process-global and
+# the next visitor would inherit it.
+
+def test_hosted_detection_local(monkeypatch):
+    from src import ee_auth
+
+    for marker in ("STREAMLIT_SHARING_MODE", "SPACE_ID", "K_SERVICE", "DYNO",
+                   "RENDER", "RAILWAY_ENVIRONMENT", "WEBSITE_INSTANCE_ID",
+                   "STREAMLIT_SERVER_HEADLESS"):
+        monkeypatch.delenv(marker, raising=False)
+    monkeypatch.setattr("os.path.exists", lambda p: False)
+    assert ee_auth.is_hosted() is False
+
+
+@pytest.mark.parametrize("marker", [
+    "STREAMLIT_SHARING_MODE", "SPACE_ID", "K_SERVICE", "DYNO", "RENDER",
+])
+def test_hosted_detection_recognises_platforms(monkeypatch, marker):
+    from src import ee_auth
+
+    monkeypatch.setenv(marker, "1")
+    assert ee_auth.is_hosted() is True
+
+
+def test_hosted_detection_fails_safe_in_containers(monkeypatch):
+    """An unrecognised container must be treated as shared, not as local."""
+    from src import ee_auth
+
+    for m in ("STREAMLIT_SHARING_MODE", "SPACE_ID", "K_SERVICE", "DYNO", "RENDER",
+              "RAILWAY_ENVIRONMENT", "WEBSITE_INSTANCE_ID", "STREAMLIT_SERVER_HEADLESS"):
+        monkeypatch.delenv(m, raising=False)
+    monkeypatch.setattr("os.path.exists", lambda p: p == "/.dockerenv")
+    assert ee_auth.is_hosted() is True
+
+
+def test_force_local_override(monkeypatch):
+    from src import ee_auth
+
+    monkeypatch.setenv("STREAMLIT_SHARING_MODE", "1")
+    monkeypatch.setenv("SCREENING_OBIWAN_FORCE_LOCAL", "true")
+    assert ee_auth.is_hosted() is False
+
+
+def test_empty_authorization_code_is_rejected():
+    from src import ee_auth
+
+    state = ee_auth.complete_authorization("", "verifier", "proj")
+    assert not state.initialized
+    assert state.credentials is None
+
+
+def test_activate_is_false_without_a_session():
+    from src import ee_auth
+
+    assert ee_auth.activate(None) is False
+    assert ee_auth.activate(ee_auth.AuthState(initialized=False)) is False
