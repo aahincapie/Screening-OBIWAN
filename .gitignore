@@ -1,0 +1,30 @@
+# --- Secrets & credentials ---
+.streamlit/secrets.toml
+*credentials*.json
+*service-account*.json
+.env
+.env.*
+
+# --- Earth Engine local auth ---
+.config/earthengine/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# --- App outputs ---
+outputs/
+*.tif
+*.xlsx
+!references/**/*.xlsx
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.pytest_cache/

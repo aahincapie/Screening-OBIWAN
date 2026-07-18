@@ -1,0 +1,14 @@
+[theme]
+primaryColor = "#1b7837"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f5f7f5"
+textColor = "#1f2421"
+font = "sans serif"
+
+[server]
+maxUploadSize = 5
+# The AOI cap is 1 MB (enforced in src/aoi.py); 5 MB here leaves room for zipped
+# shapefiles, whose sidecar files inflate the archive well beyond the geometry itself.
+
+[browser]
+gatherUsageStats = false

@@ -1,0 +1,28 @@
+# Screening-OBIWAN — production dependencies
+# Python 3.10+
+
+# --- App framework ---
+streamlit>=1.36,<2
+streamlit-folium>=0.21
+
+# --- Geospatial ---
+earthengine-api>=1.1.2
+geemap>=0.34
+geopandas>=1.0
+shapely>=2.0
+pyproj>=3.6
+fiona>=1.10           # KML/KMZ/SHP drivers via GDAL
+rasterio>=1.3         # optional local raster stratification (Phase 2 fallback)
+folium>=0.17
+
+# --- Analysis ---
+numpy>=1.26
+pandas>=2.2
+scipy>=1.13           # curve_fit (recovery curve), theilslopes (robust trend)
+
+# --- Visualisation ---
+plotly>=5.22
+
+# --- Export ---
+openpyxl>=3.1         # VM0047 workbook (charts + styling)
+XlsxWriter>=3.2       # pandas ExcelWriter fallback
