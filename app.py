@@ -11,7 +11,9 @@ Run locally::
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 
 import pandas as pd
 import streamlit as st
@@ -39,11 +41,36 @@ st.set_page_config(
 # State
 # ---------------------------------------------------------------------------
 
+def load_secrets() -> None:
+    """Mirror Streamlit secrets into the environment.
+
+    Keeps ``src/ee_auth.py`` free of any Streamlit dependency — it reads plain
+    environment variables, and this is the only place that knows about ``st.secrets``.
+    Existing environment variables win, so a local shell can always override.
+
+    Recognised keys (all optional):
+      ``EE_PROJECT_ID``           pin the Earth Engine project for this deployment
+      ``EE_SERVICE_ACCOUNT_JSON`` service-account key, for a shared/pilot deployment
+    """
+    for key in ("EE_PROJECT_ID", "EE_SERVICE_ACCOUNT_JSON"):
+        if os.environ.get(key):
+            continue
+        try:
+            value = st.secrets[key]
+        except Exception:  # noqa: BLE001 — no secrets file is the normal local case
+            continue
+        if value:
+            # A TOML table is more forgiving to paste than an escaped JSON string,
+            # so accept either shape for the service-account key.
+            os.environ[key] = value if isinstance(value, str) else json.dumps(dict(value))
+
+
 def init_state() -> None:
     defaults = {
         "ee_ready": False,
         "ee_state": None,
         "ee_project_id": "",
+        "auth_attempted": False,
         "oauth_verifier": "",
         "aoi": None,
         "result": None,
@@ -64,6 +91,28 @@ def render_auth_gate() -> bool:
         return True
 
     hosted = ee_auth.is_hosted()
+    configured_project = ee_auth.default_project_id()
+
+    # Pilot / managed deployment: the operator has pinned a project and supplied
+    # service-account credentials, so connect silently instead of asking every
+    # visitor to authenticate. Quota lands on the operator's project by design.
+    if configured_project and ee_auth.has_service_account() and not st.session_state.auth_attempted:
+        st.session_state.auth_attempted = True
+        with st.spinner("Connecting to Earth Engine…"):
+            state = ee_auth.initialize(configured_project)
+        if state.initialized:
+            st.session_state.ee_ready = True
+            st.session_state.ee_state = state
+            st.session_state.ee_project_id = state.project_id
+            st.rerun()
+        else:
+            st.warning(
+                "This deployment is configured to use "
+                f"`{configured_project}`, but the connection failed:\n\n"
+                f"```\n{ee_auth.describe_failure(state.message)}\n```\n\n"
+                "Sign in with your own account below to continue.",
+                icon="⚠️",
+            )
 
     st.markdown("## Connect to Earth Engine")
     if hosted:
@@ -84,7 +133,7 @@ def render_auth_gate() -> bool:
 
     project_id = st.text_input(
         "Earth Engine Cloud project ID",
-        value=st.session_state.ee_project_id,
+        value=st.session_state.ee_project_id or configured_project,
         placeholder="my-ee-project",
         help=(
             "Find it at code.earthengine.google.com under the project selector, or in "
@@ -560,6 +609,7 @@ def _tab_exports(result: pipeline.AnalysisResult) -> None:
 # ---------------------------------------------------------------------------
 
 def main() -> None:
+    load_secrets()
     init_state()
     components.inject_css()
 

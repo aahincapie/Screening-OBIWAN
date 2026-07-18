@@ -391,3 +391,32 @@ def test_activate_is_false_without_a_session():
 
     assert ee_auth.activate(None) is False
     assert ee_auth.activate(ee_auth.AuthState(initialized=False)) is False
+
+
+def test_authorization_url_is_generated():
+    """Regression guard: ee.oauth's PKCE surface changed across releases.
+
+    An earlier version called ee.oauth.create_code_verifier(), which does not exist in
+    earthengine-api 1.x — the sign-in link failed at runtime with an AttributeError
+    that only appeared once a user clicked the button.
+    """
+    from src import ee_auth
+
+    url, verifier = ee_auth.build_authorization_url()
+    assert url.startswith("https://")
+    assert "earthengine" in url or "google.com" in url
+    assert verifier and len(verifier) >= 16
+
+
+def test_service_account_and_project_read_from_env(monkeypatch):
+    from src import ee_auth
+
+    monkeypatch.delenv("EE_PROJECT_ID", raising=False)
+    monkeypatch.delenv("EE_SERVICE_ACCOUNT_JSON", raising=False)
+    assert ee_auth.default_project_id() == ""
+    assert ee_auth.has_service_account() is False
+
+    monkeypatch.setenv("EE_PROJECT_ID", "  ee-geocaptain  ")
+    monkeypatch.setenv("EE_SERVICE_ACCOUNT_JSON", '{"client_email": "x@y.iam"}')
+    assert ee_auth.default_project_id() == "ee-geocaptain"
+    assert ee_auth.has_service_account() is True

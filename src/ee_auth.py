@@ -164,17 +164,46 @@ def try_service_account(project_id: str) -> AuthState:
         return AuthState(False, project_id, "service_account", str(exc))
 
 
+def default_project_id() -> str:
+    """Pre-configured Earth Engine project, if the deployment supplies one.
+
+    Set ``EE_PROJECT_ID`` (env var, or a Streamlit secret that ``app.py`` mirrors into
+    the environment) to pin the project for a pilot deployment. Never hardcoded in
+    source — the value belongs to whoever runs the instance.
+    """
+    return os.environ.get("EE_PROJECT_ID", "").strip()
+
+
+def has_service_account() -> bool:
+    """True when the deployment carries service-account credentials."""
+    return bool(os.environ.get("EE_SERVICE_ACCOUNT_JSON", "").strip())
+
+
 def initialize(project_id: str, allow_service_account: bool = True) -> AuthState:
     """Best-effort initialisation. Returns state; never raises.
 
-    Order: stored credentials, then service account. Interactive OAuth is *not*
-    attempted automatically — the caller drives it, because it needs UI.
+    Order depends on the environment. On a shared host a configured service account
+    is tried **first**, because it is the deployment operator's deliberate choice and
+    is the only identity model that is actually safe for concurrent visitors. Locally,
+    stored credentials win, so a developer's own ``earthengine authenticate`` session
+    is not overridden by a stray environment variable.
+
+    Interactive OAuth is never attempted automatically — the caller drives it, because
+    it needs UI.
     """
+    prefer_service_account = allow_service_account and has_service_account() and is_hosted()
+
+    if prefer_service_account:
+        sa_state = try_service_account(project_id)
+        if sa_state.initialized:
+            return sa_state
+        logger.warning("Configured service account failed; falling back. %s", sa_state.message)
+
     state = try_stored_credentials(project_id)
     if state.initialized:
         return state
 
-    if allow_service_account:
+    if allow_service_account and not prefer_service_account:
         sa_state = try_service_account(project_id)
         if sa_state.initialized:
             return sa_state
@@ -198,12 +227,31 @@ def build_authorization_url() -> Tuple[str, str]:
         If the installed ``earthengine-api`` does not expose the OAuth helpers this
         flow needs, with instructions for the CLI fallback.
     """
-    try:
-        from ee import oauth  # noqa: PLC0415 — import here so import errors are catchable
+    from ee import oauth  # noqa: PLC0415 — import here so import errors are catchable
 
-        verifier = oauth.create_code_verifier()
-        url = oauth.get_authorization_url(verifier)
-        return url, verifier
+    # Preferred: the Flow helper (earthengine-api >= ~0.1.3xx, including 1.x). In
+    # 'notebook' mode it builds the consent URL and its matching PKCE verifier without
+    # starting a local callback server — exactly the shape a hosted app needs.
+    try:
+        flow = oauth.Flow(auth_mode="notebook")
+        return flow.auth_url, flow.code_verifier
+    except AttributeError:
+        pass  # older release: fall through to the standalone helpers
+    except Exception as exc:  # noqa: BLE001
+        raise EEAuthError(f"Could not start the Earth Engine sign-in flow: {exc}") from exc
+
+    # Fallback for older releases exposing the PKCE helpers directly. Note that
+    # get_authorization_url takes the code *challenge*, not the verifier.
+    try:
+        import base64  # noqa: PLC0415
+        import hashlib  # noqa: PLC0415
+        import os as _os  # noqa: PLC0415
+
+        verifier = base64.urlsafe_b64encode(_os.urandom(32)).decode().rstrip("=")
+        challenge = base64.urlsafe_b64encode(
+            hashlib.sha256(verifier.encode()).digest()
+        ).decode().rstrip("=")
+        return oauth.get_authorization_url(challenge), verifier
     except Exception as exc:  # noqa: BLE001
         raise EEAuthError(
             "This build of earthengine-api does not expose the interactive OAuth "
