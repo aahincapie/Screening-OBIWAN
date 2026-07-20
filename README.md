@@ -151,8 +151,19 @@ For a genuinely public multi-user deployment, set `EE_SERVICE_ACCOUNT_JSON` in t
 host's secrets — one identity is the correct model there, and it is already supported.
 The trade-off is that quota and billing move to *your* GCP project.
 
-Set `SCREENING_OBIWAN_FORCE_LOCAL=1` to override detection (e.g. a private container
-you know is single-user).
+The service account needs **two** IAM roles on the project — both, not either:
+
+| Role | Why |
+|---|---|
+| `roles/earthengine.viewer` (Earth Engine Resource Viewer) | Read Earth Engine assets |
+| `roles/serviceusage.serviceUsageConsumer` (Service Usage Consumer) | Make API calls billed to the project |
+
+Granting only the first is the most common setup mistake: authentication succeeds,
+then every request fails with `403 … Caller does not have required permission to use
+project`. Run `python scripts/check_secrets.py --connect` to catch this before deploy.
+
+Set `SCREENING_OBIWAN_FORCE_LOCAL=1` to override host detection (e.g. a private
+container you know is single-user).
 
 ### Why not Vercel
 

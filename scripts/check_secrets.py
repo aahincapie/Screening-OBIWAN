@@ -213,9 +213,14 @@ def check_connection(project_id: str, account: dict) -> None:
                 "https://signup.earthengine.google.com/#!/service_accounts — creating "
                 "it in Cloud IAM is not enough. This is the most commonly missed step."
             )
+        elif "serviceusage" in low or "services.use" in low:
+            remedy = ("Grant the service account the 'Service Usage Consumer' role "
+                      "(roles/serviceusage.serviceUsageConsumer) on this project. It is "
+                      "separate from 'Earth Engine Resource Viewer' and BOTH are "
+                      "required — the Viewer role alone cannot make API calls.")
         elif "permission" in low or "403" in low:
-            remedy = ("Grant the service account the 'Earth Engine Resource Viewer' "
-                      "role on this project.")
+            remedy = ("Grant the service account BOTH 'Earth Engine Resource Viewer' "
+                      "and 'Service Usage Consumer' roles on this project.")
         elif "invalid_grant" in low or "signature" in low:
             remedy = ("The key was rejected — usually a mangled private_key, or a key "
                       "that has been deleted. Download a fresh one.")

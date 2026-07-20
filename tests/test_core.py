@@ -420,3 +420,28 @@ def test_service_account_and_project_read_from_env(monkeypatch):
     monkeypatch.setenv("EE_SERVICE_ACCOUNT_JSON", '{"client_email": "x@y.iam"}')
     assert ee_auth.default_project_id() == "ee-geocaptain"
     assert ee_auth.has_service_account() is True
+
+
+def test_describe_failure_maps_service_usage_403():
+    """The Service Usage 403 is the top service-account failure and must name the
+    right role — an earlier version pointed every 403 at 'Resource Viewer', which is
+    necessary but insufficient and left users stuck."""
+    from src import ee_auth
+
+    real_error = (
+        "Caller does not have required permission to use project ee-geocaptain. "
+        "Grant the caller the roles/serviceusage.serviceUsageConsumer role"
+    )
+    hint = ee_auth.describe_failure(real_error)
+    assert "Service Usage Consumer" in hint
+    assert "serviceUsageConsumer" in hint
+
+    generic = ee_auth.describe_failure("403 Forbidden: permission denied")
+    assert "Service Usage Consumer" in generic and "Resource Viewer" in generic
+
+
+def test_describe_failure_still_maps_registration():
+    from src import ee_auth
+
+    hint = ee_auth.describe_failure("Service account not registered for Earth Engine")
+    assert "signup.earthengine" in hint or "not registered" in hint.lower()
