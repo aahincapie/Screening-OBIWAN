@@ -101,8 +101,9 @@ streamlit run app.py
 ```
 
 The app opens at <http://localhost:8501>. Enter your Earth Engine project ID, upload a
-KML, and press **Run screening**. There is a demo AOI (Petén, Guatemala) if you want
-to explore before uploading anything.
+KML, and press **Run screening**. There is a built-in demo AOI (a ~28,000 ha envelope
+in Salta/Jujuy, northern Argentina — bundled as `tests/ARG_envelope.geojson`) if you
+want to explore before uploading anything.
 
 ### Authentication
 

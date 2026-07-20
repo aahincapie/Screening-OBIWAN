@@ -445,3 +445,42 @@ def test_describe_failure_still_maps_registration():
 
     hint = ee_auth.describe_failure("Service account not registered for Earth Engine")
     assert "signup.earthengine" in hint or "not registered" in hint.lower()
+
+
+# ---------------------------------------------------------------------------
+# Demo AOI
+# ---------------------------------------------------------------------------
+# demo_aoi() itself needs Earth Engine (build_aoi wraps an ee.Geometry), so it is not
+# unit-testable here. What IS testable — and worth pinning — is that the bundled file
+# parses to a single polygon and that the inline fallback still describes the same
+# place, so the two cannot silently drift apart.
+
+def test_demo_aoi_file_is_present_and_valid():
+    import geopandas as gpd  # noqa: PLC0415
+    from src import aoi  # noqa: PLC0415
+
+    assert aoi.DEMO_AOI_PATH.exists(), "bundled demo geojson is missing from tests/"
+    gdf = aoi.read_aoi_bytes(aoi.DEMO_AOI_PATH.read_bytes(), aoi.DEMO_AOI_PATH.name, max_mb=1.0)
+    assert len(gdf) == 1
+    assert gdf.geometry.iloc[0].geom_type in ("Polygon", "MultiPolygon")
+
+    # Inside GEDI coverage, so the demo exercises the calibrated tier, not just IPCC.
+    _, miny, _, maxy = gdf.total_bounds
+    assert abs(miny) <= 51.6 and abs(maxy) <= 51.6
+
+
+def test_demo_fallback_matches_bundled_file():
+    """The inline fallback must stay in sync with tests/ARG_envelope.geojson."""
+    import geopandas as gpd  # noqa: PLC0415
+    from shapely.geometry import Polygon  # noqa: PLC0415
+    from src import aoi  # noqa: PLC0415
+
+    gdf = aoi.read_aoi_bytes(aoi.DEMO_AOI_PATH.read_bytes(), aoi.DEMO_AOI_PATH.name, max_mb=1.0)
+    fallback = gpd.GeoSeries([Polygon(aoi._DEMO_FALLBACK_COORDS)], crs="EPSG:4326")
+
+    area_file = gdf.to_crs(aoi.EQUAL_AREA_CRS).area.sum() / 1e4
+    area_fallback = fallback.to_crs(aoi.EQUAL_AREA_CRS).area.sum() / 1e4
+    assert abs(area_file - area_fallback) < 100, (
+        "inline fallback has drifted from the bundled demo file — update "
+        "_DEMO_FALLBACK_COORDS in src/aoi.py to match tests/ARG_envelope.geojson"
+    )
