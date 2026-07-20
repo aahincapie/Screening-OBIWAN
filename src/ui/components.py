@@ -15,29 +15,139 @@ import streamlit as st
 
 from src.carbon_curve import TIER_GEDI, TIER_IPCC, TIER_LABELS, TIER_PARTIAL
 
+# Text-safe variants of the tier colours. The chart palette in src/ui/charts.py uses
+# brighter values because a plotted mark only needs 3:1 contrast; badge and callout
+# text needs 4.5:1 against its own tinted background, which forces these darker.
 TIER_STYLES = {
-    TIER_GEDI: ("#1b7837", "#e8f5ed", "Site-calibrated"),
-    TIER_PARTIAL: ("#e08214", "#fdf2e3", "Partially calibrated"),
-    TIER_IPCC: ("#d73027", "#fdeaea", "Indicative only"),
+    TIER_GEDI: ("#0B5C36", "#E7F4EC", "Site-calibrated"),
+    TIER_PARTIAL: ("#8A4B0C", "#FBF0E2", "Partially calibrated"),
+    TIER_IPCC: ("#9B2218", "#FCEBEA", "Indicative only"),
 }
 
 
 def inject_css() -> None:
-    """Global styling. Kept minimal — Streamlit defaults are fine for most of it."""
+    """Global styling.
+
+    Three deliberate choices, since this is a numbers-first instrument rather than a
+    marketing page:
+
+    * **Tabular figures everywhere a quantity appears.** Proportional digits make
+      columns of hectares and tCO2e ripple; lining them up is the single largest
+      legibility win in the app.
+    * **One radius scale.** Surfaces 10px, controls 8px, badges fully round, with no
+      exceptions, so nothing reads as accidental.
+    * **Colour carries meaning, never decoration.** The accent green marks the primary
+      path and nothing else; tier colours stay reserved for provenance. Anything
+      merely structural is a neutral hairline.
+
+    Selectors lean on Streamlit's ``data-testid`` attributes, the most stable hooks
+    available but still internal: if a Streamlit upgrade flattens the styling, this is
+    the first place to look.
+    """
     st.markdown(
         """
         <style>
-          .block-container { padding-top: 2rem; max-width: 1400px; }
-          [data-testid="stMetricValue"] { font-size: 1.6rem; }
+          :root {
+            --so-accent: #0F7B47;
+            --so-accent-strong: #0B5C36;
+            --so-ink: #16211D;
+            --so-ink-muted: #55635C;
+            --so-surface: #FFFFFF;
+            --so-surface-sunk: #F4F7F5;
+            --so-border: #DCE5E0;
+            --so-border-strong: #C3D1CA;
+            --so-radius-surface: 10px;
+            --so-radius-control: 8px;
+          }
+
+          .block-container { padding-top: 2.25rem; max-width: 1400px; }
+
+          /* Quantities align in a column regardless of which digits they contain. */
+          [data-testid="stMetricValue"],
+          [data-testid="stMetricDelta"],
+          [data-testid="stDataFrame"] {
+            font-variant-numeric: tabular-nums;
+            font-feature-settings: "tnum" 1;
+          }
+
+          /* Headings: weight and a hairline do the work, not raw size. */
+          h1 { font-size: 2rem; font-weight: 700; letter-spacing: -0.022em; }
+          h3 {
+            font-size: 1.12rem; font-weight: 650; letter-spacing: -0.01em;
+            padding-bottom: 0.45rem; margin-bottom: 0.9rem;
+            border-bottom: 1px solid var(--so-border);
+          }
+
+          /* KPI strip: each metric becomes a surface with an accent rule, so the
+             headline numbers read as an instrument panel rather than loose text. */
+          [data-testid="stMetric"] {
+            background: var(--so-surface);
+            border: 1px solid var(--so-border);
+            border-left: 3px solid var(--so-accent);
+            border-radius: var(--so-radius-surface);
+            padding: 0.9rem 1.1rem;
+          }
+          [data-testid="stMetricValue"] {
+            font-size: 1.55rem; font-weight: 660; letter-spacing: -0.02em;
+            color: var(--so-ink);
+          }
+          [data-testid="stMetricLabel"] {
+            font-size: 0.8rem; font-weight: 600; color: var(--so-ink-muted);
+            text-transform: uppercase; letter-spacing: 0.06em;
+          }
+
           .so-badge {
-            display: inline-block; padding: 3px 10px; border-radius: 12px;
-            font-size: 0.78rem; font-weight: 600; letter-spacing: 0.2px;
+            display: inline-block; padding: 4px 11px; border-radius: 999px;
+            font-size: 0.78rem; font-weight: 600; letter-spacing: 0.15px;
+            border: 1px solid currentColor;
           }
+
           .so-empty {
-            border: 1px dashed #d0d0d0; border-radius: 10px; padding: 2.5rem 1.5rem;
-            text-align: center; color: #666;
+            border: 1px dashed var(--so-border-strong);
+            border-radius: var(--so-radius-surface);
+            background: var(--so-surface-sunk);
+            padding: 2.75rem 1.5rem; text-align: center;
+            color: var(--so-ink-muted);
           }
-          .so-empty h4 { margin: 0 0 0.4rem 0; color: #333; }
+          .so-empty h4 {
+            margin: 0 0 0.35rem 0; color: var(--so-ink);
+            font-size: 1.02rem; font-weight: 650;
+          }
+          .so-empty p { margin: 0; max-width: 46ch; margin-inline: auto; }
+
+          /* Tabs: an underline indicator reads as navigation, where Streamlit's
+             default reads as a row of unrelated links. */
+          .stTabs [data-baseweb="tab-list"] {
+            gap: 1.5rem; border-bottom: 1px solid var(--so-border);
+          }
+          .stTabs [data-baseweb="tab"] {
+            padding: 0.55rem 0; font-weight: 600; color: var(--so-ink-muted);
+          }
+          .stTabs [aria-selected="true"] { color: var(--so-accent-strong); }
+
+          /* Buttons keep the 8px control radius and acknowledge the press. */
+          .stButton button {
+            border-radius: var(--so-radius-control); font-weight: 600;
+            transition: transform 0.12s ease, box-shadow 0.12s ease;
+          }
+          .stButton button:active { transform: translateY(1px); }
+          .stButton button[kind="primary"] {
+            box-shadow: 0 1px 2px rgba(11, 92, 54, 0.24);
+          }
+
+          [data-testid="stSidebar"] { border-right: 1px solid var(--so-border); }
+
+          [data-testid="stExpander"] details {
+            border: 1px solid var(--so-border);
+            border-radius: var(--so-radius-surface);
+          }
+
+          /* The press feedback above is the only motion in the app, but honour the
+             preference regardless so it never fights an accessibility setting. */
+          @media (prefers-reduced-motion: reduce) {
+            .stButton button { transition: none; }
+            .stButton button:active { transform: none; }
+          }
         </style>
         """,
         unsafe_allow_html=True,

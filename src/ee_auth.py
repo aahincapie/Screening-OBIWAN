@@ -410,10 +410,24 @@ def describe_failure(exc_message: str) -> str:
             "https://earthengine.google.com/signup/ (free for research and "
             "non-commercial use), then retry."
         )
+    # Distinct 403s need distinct fixes. The Service Usage one is the most common
+    # service-account failure and the least self-explanatory, so it comes first.
+    if "serviceusage" in msg or "serviceusageconsumer" in msg or "services.use" in msg:
+        return (
+            "The service account authenticated, but lacks permission to use the Cloud "
+            "project's APIs. Grant it the 'Service Usage Consumer' role "
+            "(roles/serviceusage.serviceUsageConsumer) on this project — this is "
+            "separate from, and required in addition to, 'Earth Engine Resource "
+            "Viewer'. Do it at "
+            "https://console.cloud.google.com/iam-admin/iam then wait a few minutes "
+            "for the grant to propagate."
+        )
     if "permission" in msg or "403" in msg:
         return (
-            "The account is registered but lacks access to this Cloud project. Check "
-            "the project ID, and that the Earth Engine API is enabled on it."
+            "The account authenticated but is not authorised for this Cloud project. "
+            "Check that the project ID is correct, that the Earth Engine API is enabled "
+            "on it, and — for a service account — that it holds both 'Earth Engine "
+            "Resource Viewer' and 'Service Usage Consumer' roles."
         )
     if "quota" in msg or "429" in msg:
         return (

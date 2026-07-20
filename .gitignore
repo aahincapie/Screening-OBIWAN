@@ -28,3 +28,7 @@ Thumbs.db
 .vscode/
 .idea/
 .pytest_cache/
+
+# Local tooling — machine-specific, never commit
+.agents/
+.claude/skills/

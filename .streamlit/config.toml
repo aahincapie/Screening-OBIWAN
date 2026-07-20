@@ -1,8 +1,13 @@
 [theme]
-primaryColor = "#1b7837"
+# Light-locked by design. Charts, map tiles and provenance colours are all tuned
+# against a white ground, and a half-working dark mode would undermine the one thing
+# this UI has to get right: making uncertainty legible. The CSS tokens in
+# src/ui/components.py mirror these values, so change both together.
+base = "light"
+primaryColor = "#0F7B47"
 backgroundColor = "#ffffff"
-secondaryBackgroundColor = "#f5f7f5"
-textColor = "#1f2421"
+secondaryBackgroundColor = "#F4F7F5"
+textColor = "#16211D"
 font = "sans serif"
 
 [server]
