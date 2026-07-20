@@ -305,17 +305,42 @@ def load_aoi(data: bytes, filename: str, cfg: AOIConfig) -> AOI:
     return build_aoi(gdf, cfg, source_name=filename)
 
 
+# Bundled demo boundary, resolved relative to this module so it works from any
+# working directory and on Streamlit Cloud (which clones the whole repo).
+DEMO_AOI_PATH = Path(__file__).resolve().parent.parent / "tests" / "ARG_envelope.geojson"
+
+# Extent of the bundled file, inlined so the demo still works if the file is absent
+# from a partial deploy. Keep in sync with tests/ARG_envelope.geojson.
+_DEMO_FALLBACK_COORDS = [
+    (-64.669534, -23.632389), (-64.503881, -23.632389),
+    (-64.503881, -23.484167), (-64.669534, -23.484167), (-64.669534, -23.632389),
+]
+_DEMO_NAME = "Demo AOI — Salta/Jujuy, Argentina"
+
+
 def demo_aoi(cfg: Optional[AOIConfig] = None) -> AOI:
     """A small built-in AOI so the app is explorable before anyone uploads a file.
 
-    Roughly 3,000 ha of mixed forest/agriculture mosaic in the Guatemalan Petén —
-    a region with genuine Hansen loss, so every analysis phase returns something.
+    A ~28,000 ha envelope in the subtropical dry forest of Salta/Jujuy, northern
+    Argentina (~23.6 degrees S, 64.6 degrees W). It sits inside GEDI coverage and over
+    real Hansen forest change, so every analysis phase returns something.
+
+    Loads the bundled ``tests/ARG_envelope.geojson`` when present, and falls back to an
+    inline polygon of the same extent if the file is missing — so a partial deploy
+    cannot break the demo button.
     """
+    cfg = cfg or AOIConfig()
+
+    if DEMO_AOI_PATH.exists():
+        try:
+            return load_aoi(DEMO_AOI_PATH.read_bytes(), DEMO_AOI_PATH.name, cfg)
+        except AOIError as exc:  # malformed file: fall back rather than dead-end
+            logger.warning("Bundled demo AOI unreadable (%s); using inline fallback.", exc)
+
     from shapely.geometry import Polygon
 
-    poly = Polygon([
-        (-89.60, 16.50), (-89.44, 16.50), (-89.44, 16.62), (-89.60, 16.62), (-89.60, 16.50),
-    ])
-    gdf = gpd.GeoDataFrame({"name": ["Demo AOI — Petén, Guatemala"]},
-                           geometry=[poly], crs="EPSG:4326")
-    return build_aoi(gdf, cfg or AOIConfig(), source_name="demo_peten.kml")
+    gdf = gpd.GeoDataFrame(
+        {"name": [_DEMO_NAME]},
+        geometry=[Polygon(_DEMO_FALLBACK_COORDS)], crs="EPSG:4326",
+    )
+    return build_aoi(gdf, cfg, source_name="ARG_envelope.geojson")
