@@ -22,11 +22,18 @@ import plotly.graph_objects as go
 
 from config.defaults import CLASS_COLORS, CLASS_LABELS
 
-GREEN = "#1b7837"
-RED = "#d73027"
-BLUE = "#4575b4"
-GREY = "#7f7f7f"
-AMBER = "#e08214"
+# Shared with the CSS tokens in src/ui/components.py and .streamlit/config.toml.
+# GREEN is the single accent for the whole app, so it must stay identical in all
+# three places; the rest are semantic signals, not decoration.
+GREEN = "#0F7B47"
+RED = "#C4342A"
+BLUE = "#3D6FB0"
+GREY = "#7C8A83"
+AMBER = "#C4761A"
+
+INK = "#16211D"
+INK_MUTED = "#55635C"
+GRID = "#E8EEEA"
 
 LAYOUT = dict(
     template="plotly_white",
@@ -34,11 +41,34 @@ LAYOUT = dict(
     hovermode="x unified",
     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
     height=420,
+    # A recessive grid and muted tick labels push the data forward; the default
+    # plotly_white grid competes with the series for attention. These use Plotly's
+    # magic-underscore form rather than ``xaxis=dict(...)`` so they cannot collide
+    # with the ``xaxis_title`` that _apply passes alongside them.
+    font=dict(size=12, color=INK_MUTED),
+    xaxis_gridcolor=GRID,
+    xaxis_zerolinecolor=GRID,
+    xaxis_linecolor=GRID,
+    yaxis_gridcolor=GRID,
+    yaxis_zerolinecolor=GRID,
+    yaxis_linecolor=GRID,
+    plot_bgcolor="#FFFFFF",
+    paper_bgcolor="#FFFFFF",
+    hoverlabel=dict(bgcolor="#FFFFFF", bordercolor=GRID, font=dict(color=INK)),
 )
+
+TITLE_FONT = dict(size=15, color=INK)
 
 
 def _apply(fig: go.Figure, title: str, x_title: str, y_title: str) -> go.Figure:
-    fig.update_layout(title=title, xaxis_title=x_title, yaxis_title=y_title, **LAYOUT)
+    # Title text and title styling go in together, because passing ``title`` here and
+    # a ``title`` key inside LAYOUT would be a duplicate keyword argument.
+    fig.update_layout(
+        title=dict(text=title, font=TITLE_FONT),
+        xaxis_title=x_title,
+        yaxis_title=y_title,
+        **LAYOUT,
+    )
     return fig
 
 
