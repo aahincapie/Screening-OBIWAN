@@ -85,21 +85,6 @@ does rather than what the literature says a landscape like it should do.
 **Prerequisites:** Python 3.10+, and a Google account registered for
 [Earth Engine](https://earthengine.google.com/signup/) with a Cloud project.
 
-```bash
-git clone https://github.com/<you>/Screening-OBIWAN.git
-cd Screening-OBIWAN
-
-python -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
-
-pip install -r requirements.txt
-
-# One-off Earth Engine sign-in (recommended — avoids the in-app OAuth flow)
-earthengine authenticate
-
-streamlit run app.py
-```
-
 The app opens at <http://localhost:8501>. Enter your Earth Engine project ID, upload a
 KML, and press **Run screening**. There is a built-in demo AOI (a ~1,750 ha envelope
 near Cartagena, Bolivar, northern Colombia, bundled as `tests/COL_envelope.geojson`)
@@ -118,29 +103,6 @@ If `earthengine authenticate` is unavailable, the app offers a browser OAuth flo
 ---
 
 ## Deployment
-
-### Streamlit Community Cloud (recommended)
-
-1. <https://share.streamlit.io> → **New app**
-2. Repository `aahincapie/Screening-OBIWAN`, branch `main`, main file `app.py`
-3. **Deploy**
-
-`requirements.txt`, `runtime.txt` and `.streamlit/config.toml` are already configured.
-No system packages are needed — `geopandas` and `fiona` ship GDAL in their wheels.
-
-### ⚠️ Per-user OAuth on a shared host
-
-`earthengine-api` keeps its session in **process-global** state, and Streamlit
-Community Cloud runs **one process serving every visitor**. The app handles this:
-
-- `src/ee_auth.py::is_hosted` detects a shared deployment and **never writes an OAuth
-  refresh token to disk** there — credentials are held in per-session memory only, so
-  one visitor's token cannot be picked up by the next.
-- `src/ee_auth.py::activate` re-binds the global session to the current visitor's
-  credentials immediately before their analysis runs.
-
-**This narrows the race but cannot close it.** Two visitors running analyses at the
-same instant can still interleave, because one global cannot represent two identities.
 
 | Deployment | Verdict |
 |---|---|
