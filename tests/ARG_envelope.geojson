@@ -1,8 +1,0 @@
-{
-"type": "FeatureCollection",
-"name": "ARG_envelope",
-"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
-"features": [
-{ "type": "Feature", "properties": { "id": 0, "width": 0.165653, "height": 0.148222, "area": 0.024553, "perimeter": 0.627751 }, "geometry": { "type": "Polygon", "coordinates": [ [ [ -64.669534088549497, -23.632389254544499 ], [ -64.503881181987893, -23.632389254544499 ], [ -64.503881181987893, -23.484166842852598 ], [ -64.669534088549497, -23.484166842852598 ], [ -64.669534088549497, -23.632389254544499 ] ] ] } }
-]
-}
