@@ -333,6 +333,7 @@ def _tab_land_cover(result: pipeline.AnalysisResult) -> None:
             st.warning(
                 "The transition raster could not be drawn on the map (the analysis "
                 "numbers on the right are unaffected).\n\n"
+                f"**What to do:** {ee_auth.describe_failure(map_error)}\n\n"
                 f"```\n{map_error}\n```",
                 icon="🗺️",
             )
