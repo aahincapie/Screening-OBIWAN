@@ -440,6 +440,16 @@ def test_describe_failure_maps_service_usage_403():
     assert "Service Usage Consumer" in generic and "Resource Viewer" in generic
 
 
+def test_describe_failure_maps_maps_create_403():
+    """getMapId needs earthengine.maps.create, which the Viewer role lacks. The hint
+    must name the Writer role, not the generic 403 advice."""
+    from src import ee_auth
+
+    err = "Permission 'earthengine.maps.create' denied on resource 'projects/ee-geocaptain'"
+    hint = ee_auth.describe_failure(err)
+    assert "Resource Writer" in hint and "earthengine.writer" in hint
+
+
 def test_describe_failure_still_maps_registration():
     from src import ee_auth
 

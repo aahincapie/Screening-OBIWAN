@@ -426,8 +426,20 @@ def describe_failure(exc_message: str) -> str:
             "https://earthengine.google.com/signup/ (free for research and "
             "non-commercial use), then retry."
         )
-    # Distinct 403s need distinct fixes. The Service Usage one is the most common
-    # service-account failure and the least self-explanatory, so it comes first.
+    # Distinct 403s need distinct fixes. Each names the exact role to grant.
+    # getMapId (drawing the transition raster) needs maps.create, which the Viewer
+    # role does not include — computations still work, so only the map breaks.
+    if "maps.create" in msg or "earthengine.maps" in msg:
+        return (
+            "The service account can run computations but not create map tiles. Grant "
+            "it the 'Earth Engine Resource Writer' role (roles/earthengine.writer) on "
+            "this project, in addition to what it already has — Writer includes the "
+            "earthengine.maps.create permission that drawing the raster needs. Do it at "
+            "https://console.cloud.google.com/iam-admin/iam then wait a few minutes for "
+            "the grant to propagate. The analysis numbers are unaffected either way."
+        )
+    # The Service Usage 403 is the most common service-account failure and the least
+    # self-explanatory, so it comes next.
     if "serviceusage" in msg or "serviceusageconsumer" in msg or "services.use" in msg:
         return (
             "The service account authenticated, but lacks permission to use the Cloud "
