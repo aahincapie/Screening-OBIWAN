@@ -55,11 +55,15 @@ CLASS_LABELS: Dict[int, str] = {
     FOREST_GAIN: "Forest gain (regenerating)",
 }
 
+# Tuned for the dark theme: hue-preserving but brightened so each class reads both on
+# the near-black chart ground and on the map's dark basemap. These feed the legend,
+# the chart series, and the Earth Engine map raster palette (via visualization_params),
+# so all three stay in sync.
 CLASS_COLORS: Dict[int, str] = {
-    STABLE_FOREST: "#1b7837",
-    STABLE_NONFOREST: "#d9b365",
-    FOREST_LOSS: "#d73027",
-    FOREST_GAIN: "#4575b4",
+    STABLE_FOREST: "#2E9E54",      # forest green
+    STABLE_NONFOREST: "#E0B95C",   # sand
+    FOREST_LOSS: "#E64B3C",        # red (deforested)
+    FOREST_GAIN: "#5B93D6",        # blue (regenerating)
 }
 
 # Reforestation focus (constraint 3): only these two classes are *plantable*.
