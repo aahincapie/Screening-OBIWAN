@@ -22,29 +22,33 @@ import plotly.graph_objects as go
 
 from config.defaults import CLASS_COLORS, CLASS_LABELS
 
-# Shared with the CSS tokens in src/ui/components.py and .streamlit/config.toml.
-# GREEN is the single accent for the whole app, so it must stay identical in all
-# three places; the rest are semantic signals, not decoration.
-GREEN = "#0F7B47"
-RED = "#C4342A"
-BLUE = "#3D6FB0"
-GREY = "#7C8A83"
-AMBER = "#C4761A"
+# Dark-theme chart palette, mirrored with the CSS tokens in src/ui/components.py and
+# .streamlit/config.toml — change all three together. On a near-black ground the marks
+# are brightened for legibility (a plotted mark needs ~3:1 contrast): GREEN is the
+# single brand accent, the rest are semantic signals, not decoration.
+GREEN = "#35C285"
+RED = "#F0655A"
+BLUE = "#5B9BE0"
+GREY = "#8A978F"
+AMBER = "#E0954A"
 
-INK = "#16211D"
-INK_MUTED = "#55635C"
-GRID = "#E8EEEA"
+INK = "#E7EEE9"          # off-white text (titles, hover, in-chart marks)
+INK_MUTED = "#93A29A"    # tick labels, axis titles
+GRID = "#26312B"         # recessive grid, barely above the surface
+SURFACE_ELEVATED = "#151D19"
+BORDER_STRONG = "#37453E"
 
 LAYOUT = dict(
-    template="plotly_white",
+    template="plotly_dark",
     margin=dict(l=60, r=30, t=60, b=50),
     hovermode="x unified",
     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
     height=420,
-    # A recessive grid and muted tick labels push the data forward; the default
-    # plotly_white grid competes with the series for attention. These use Plotly's
-    # magic-underscore form rather than ``xaxis=dict(...)`` so they cannot collide
-    # with the ``xaxis_title`` that _apply passes alongside them.
+    # Transparent backgrounds let each chart sit directly on the app's dark surface
+    # instead of stamping a slightly-different rectangle onto it. A recessive grid and
+    # muted ticks push the data forward. These use Plotly's magic-underscore form
+    # rather than ``xaxis=dict(...)`` so they cannot collide with the ``xaxis_title``
+    # that _apply passes alongside them.
     font=dict(size=12, color=INK_MUTED),
     xaxis_gridcolor=GRID,
     xaxis_zerolinecolor=GRID,
@@ -52,9 +56,10 @@ LAYOUT = dict(
     yaxis_gridcolor=GRID,
     yaxis_zerolinecolor=GRID,
     yaxis_linecolor=GRID,
-    plot_bgcolor="#FFFFFF",
-    paper_bgcolor="#FFFFFF",
-    hoverlabel=dict(bgcolor="#FFFFFF", bordercolor=GRID, font=dict(color=INK)),
+    plot_bgcolor="rgba(0,0,0,0)",
+    paper_bgcolor="rgba(0,0,0,0)",
+    hoverlabel=dict(bgcolor=SURFACE_ELEVATED, bordercolor=BORDER_STRONG,
+                    font=dict(color=INK)),
 )
 
 TITLE_FONT = dict(size=15, color=INK)
@@ -153,21 +158,21 @@ def change_bars(change: pd.DataFrame, as_carbon: bool = False) -> go.Figure:
 
     fig = go.Figure(go.Bar(
         x=change["stratum_label"], y=change[value_col],
-        error_y=dict(type="data", array=1.96 * change[se_col], visible=True, color="#444"),
+        error_y=dict(type="data", array=1.96 * change[se_col], visible=True, color=INK_MUTED),
         marker=dict(
             color=[c if s else "rgba(0,0,0,0)" for c, s in zip(colors, significant)],
             line=dict(color=colors, width=2),
         ),
         hovertemplate=f"%{{x}}<br>%{{y:+.1f}} {unit}<extra></extra>",
     ))
-    fig.add_hline(y=0, line_width=1, line_color="#333")
+    fig.add_hline(y=0, line_width=1, line_color=BORDER_STRONG)
 
     y0, y1 = (change["year_0"].iloc[0], change["year_1"].iloc[0]) if len(change) else ("", "")
     fig = _apply(fig, f"Biomass change {y0}-{y1} (95% CI)", "", unit)
     fig.add_annotation(
-        text="Hollow bars: interval crosses zero — not significant at 95%",
+        text="Hollow bars: interval crosses zero, not significant at 95%",
         xref="paper", yref="paper", x=0, y=-0.18, showarrow=False,
-        font=dict(size=11, color="#666"),
+        font=dict(size=11, color=INK_MUTED),
     )
     return fig
 
@@ -207,7 +212,7 @@ def carbon_curve(
         fig.add_trace(go.Scatter(
             x=observed["age"], y=observed["tco2e_ha"],
             mode="markers", name="Observed (GEDI)",
-            marker=dict(color="black", size=9, symbol="circle-open", line=dict(width=2)),
+            marker=dict(color=INK, size=9, symbol="circle-open", line=dict(width=2)),
         ))
 
     title = "Carbon accumulation curve (per hectare)"
@@ -304,7 +309,7 @@ def deduction_waterfall(summary: Dict[str, float]) -> go.Figure:
         y=[value for _, value, _ in steps],
         text=[f"{abs(v):,.0f}" for _, v, _ in steps],
         textposition="outside",
-        connector=dict(line=dict(color="#bbb")),
+        connector=dict(line=dict(color=BORDER_STRONG)),
         increasing=dict(marker=dict(color=GREEN)),
         decreasing=dict(marker=dict(color=AMBER)),
         totals=dict(marker=dict(color=BLUE)),

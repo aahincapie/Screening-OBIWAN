@@ -30,7 +30,7 @@ logging.basicConfig(
 )
 
 st.set_page_config(
-    page_title="Screening-OBIWAN — ARR Reforestation Screening",
+    page_title="ARR Due Diligence - OBIWAN",
     page_icon="🌱",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -310,16 +310,24 @@ def _tab_land_cover(result: pipeline.AnalysisResult) -> None:
     col_map, col_stats = st.columns([3, 2])
 
     with col_map:
-        reforestation_only = st.toggle(
-            "Show reforestation candidates only", value=False,
+        controls = st.columns([2, 3])
+        reforestation_only = controls[0].toggle(
+            "Reforestation only", value=False,
             help="Hides stable forest and regenerating land to isolate plantable area.",
         )
-        basemap = st.selectbox("Basemap", list(maps.BASEMAPS.keys()), index=0)
+        basemap = controls[1].selectbox(
+            "Basemap", list(maps.BASEMAPS.keys()), index=0,
+            help="Dark shows the transition colors most clearly; Satellite adds context.",
+        )
 
         from streamlit_folium import st_folium  # noqa: PLC0415
 
         fmap = maps.build_map(
             result.aoi, transitions.image, basemap, reforestation_only
+        )
+        st.caption(
+            "White dashed outline is your AOI. Colored fill is the Hansen transition "
+            "class per pixel (see legend below)."
         )
         st_folium(fmap, height=520, width=None, returned_objects=[])
         st.markdown(maps.legend_html(reforestation_only), unsafe_allow_html=True)
@@ -613,9 +621,13 @@ def main() -> None:
     init_state()
     components.inject_css()
 
-    st.title("🌱 Screening-OBIWAN")
+    st.title("ARR Due Diligence")
+    st.markdown(
+        '<div class="so-subtitle">OBIWAN · Powered by NASA GEDI biomass data</div>',
+        unsafe_allow_html=True,
+    )
     st.caption(
-        "Ex-ante screening for reforestation (ARR) carbon projects — anywhere on Earth. "
+        "Ex-ante screening for reforestation (ARR) carbon projects, anywhere on Earth. "
         "Hansen forest change · GEDI biomass · VM0047 quantification."
     )
 

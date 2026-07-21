@@ -15,13 +15,15 @@ import streamlit as st
 
 from src.carbon_curve import TIER_GEDI, TIER_IPCC, TIER_LABELS, TIER_PARTIAL
 
-# Text-safe variants of the tier colours. The chart palette in src/ui/charts.py uses
-# brighter values because a plotted mark only needs 3:1 contrast; badge and callout
-# text needs 4.5:1 against its own tinted background, which forces these darker.
+# Tier badge colours for the dark theme: a bright text colour on a low-alpha tint of
+# the same hue. The badge border follows the text colour (currentColor in CSS), so
+# each chip reads as a self-contained token. Text colours clear WCAG AA (>=4.5:1)
+# against the near-black surface; the tint sits under them without lifting to a light
+# chip that would fight the dark page.
 TIER_STYLES = {
-    TIER_GEDI: ("#0B5C36", "#E7F4EC", "Site-calibrated"),
-    TIER_PARTIAL: ("#8A4B0C", "#FBF0E2", "Partially calibrated"),
-    TIER_IPCC: ("#9B2218", "#FCEBEA", "Indicative only"),
+    TIER_GEDI: ("#4FD98F", "rgba(23,160,92,0.16)", "Site-calibrated"),
+    TIER_PARTIAL: ("#E8A657", "rgba(224,149,74,0.16)", "Partially calibrated"),
+    TIER_IPCC: ("#F0776B", "rgba(240,101,90,0.16)", "Indicative only"),
 }
 
 
@@ -48,19 +50,29 @@ def inject_css() -> None:
         """
         <style>
           :root {
-            --so-accent: #0F7B47;
-            --so-accent-strong: #0B5C36;
-            --so-ink: #16211D;
-            --so-ink-muted: #55635C;
-            --so-surface: #FFFFFF;
-            --so-surface-sunk: #F4F7F5;
-            --so-border: #DCE5E0;
-            --so-border-strong: #C3D1CA;
+            /* Dark forest palette. Mirrors .streamlit/config.toml and the chart
+               constants in src/ui/charts.py; change all three together. */
+            --so-accent: #17A05C;         /* brand green, brightened for a dark ground */
+            --so-accent-strong: #3FC584;  /* brighter still, for text/selected states */
+            --so-ink: #E7EEE9;            /* off-white, faint green (never pure #fff) */
+            --so-ink-muted: #93A29A;      /* secondary text, AA on the surface */
+            --so-surface: #0E1512;        /* near-black forest (never pure #000) */
+            --so-surface-elevated: #151D19;
+            --so-surface-sunk: #0A100D;
+            --so-border: #26312B;
+            --so-border-strong: #37453E;
             --so-radius-surface: 10px;
             --so-radius-control: 8px;
           }
 
           .block-container { padding-top: 2.25rem; max-width: 1400px; }
+
+          /* Subtitle under the H1: the product line, quieter than the title. */
+          .so-subtitle {
+            color: var(--so-accent-strong);
+            font-size: 0.95rem; font-weight: 600; letter-spacing: 0.01em;
+            margin: -0.4rem 0 0.2rem 0;
+          }
 
           /* Quantities align in a column regardless of which digits they contain. */
           [data-testid="stMetricValue"],
@@ -81,7 +93,7 @@ def inject_css() -> None:
           /* KPI strip: each metric becomes a surface with an accent rule, so the
              headline numbers read as an instrument panel rather than loose text. */
           [data-testid="stMetric"] {
-            background: var(--so-surface);
+            background: var(--so-surface-elevated);
             border: 1px solid var(--so-border);
             border-left: 3px solid var(--so-accent);
             border-radius: var(--so-radius-surface);
@@ -132,7 +144,7 @@ def inject_css() -> None:
           }
           .stButton button:active { transform: translateY(1px); }
           .stButton button[kind="primary"] {
-            box-shadow: 0 1px 2px rgba(11, 92, 54, 0.24);
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
           }
 
           [data-testid="stSidebar"] { border-right: 1px solid var(--so-border); }

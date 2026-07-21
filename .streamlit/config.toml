@@ -1,13 +1,17 @@
 [theme]
-# Light-locked by design. Charts, map tiles and provenance colours are all tuned
-# against a white ground, and a half-working dark mode would undermine the one thing
-# this UI has to get right: making uncertainty legible. The CSS tokens in
-# src/ui/components.py mirror these values, so change both together.
-base = "light"
-primaryColor = "#0F7B47"
-backgroundColor = "#ffffff"
-secondaryBackgroundColor = "#F4F7F5"
-textColor = "#16211D"
+# Dark-locked by design. One theme for the whole app: charts, map tiles and
+# provenance colours are all tuned against a near-black forest ground so that
+# uncertainty stays legible. No section inverts to light. These values are mirrored
+# as CSS tokens in src/ui/components.py and as chart constants in src/ui/charts.py,
+# so change all three together.
+#
+# Palette: near-black forest surface, off-white ink (never pure #000 or #fff), a
+# single brightened forest-green accent, semantic red/blue/amber reserved for meaning.
+base = "dark"
+primaryColor = "#17A05C"
+backgroundColor = "#0E1512"
+secondaryBackgroundColor = "#151D19"
+textColor = "#E7EEE9"
 font = "sans serif"
 
 [server]

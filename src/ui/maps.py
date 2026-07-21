@@ -16,7 +16,14 @@ from config.defaults import ALL_CLASSES, CLASS_COLORS, CLASS_LABELS, REFORESTATI
 
 logger = logging.getLogger(__name__)
 
+# "Dark" is first, so it is the default: against a near-black ground the white AOI
+# outline and the colored transition raster both read clearly, where the same layers
+# over busy satellite imagery turn muddy. Satellite stays available for context.
 BASEMAPS = {
+    "Dark": {
+        "tiles": "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+        "attr": "CARTO",
+    },
     "Satellite": {
         "tiles": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
         "attr": "Esri World Imagery",
@@ -48,9 +55,9 @@ def _add_ee_layer(fmap: folium.Map, image, vis_params: dict, name: str, opacity:
 def build_map(
     aoi,
     transition_image=None,
-    basemap: str = "Satellite",
+    basemap: str = "Dark",
     show_reforestation_only: bool = False,
-    opacity: float = 0.75,
+    opacity: float = 0.82,
 ) -> folium.Map:
     """Build the main map: basemap, AOI outline, and the transition raster.
 
