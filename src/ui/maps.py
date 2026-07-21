@@ -16,17 +16,16 @@ from config.defaults import ALL_CLASSES, CLASS_COLORS, CLASS_LABELS, REFORESTATI
 
 logger = logging.getLogger(__name__)
 
-# "Dark" is first, so it is the default: against a near-black ground the white AOI
-# outline and the colored transition raster both read clearly, where the same layers
-# over busy satellite imagery turn muddy. Satellite stays available for context.
+# Satellite is the default. Dark stays available for when the transition colours need
+# to pop against a plain ground; Terrain and Street add cartographic context.
 BASEMAPS = {
-    "Dark": {
-        "tiles": "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
-        "attr": "CARTO",
-    },
     "Satellite": {
         "tiles": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
         "attr": "Esri World Imagery",
+    },
+    "Dark": {
+        "tiles": "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+        "attr": "CARTO",
     },
     "Terrain": {
         "tiles": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
@@ -36,30 +35,67 @@ BASEMAPS = {
 }
 
 
-def _add_ee_layer(fmap: folium.Map, image, vis_params: dict, name: str, opacity: float = 0.75) -> None:
-    """Add an Earth Engine image as a tile layer."""
+def _add_ee_layer(fmap: folium.Map, image, vis_params: dict, name: str,
+                  opacity: float = 0.82) -> Optional[str]:
+    """Add an Earth Engine image as a tile layer.
+
+    Returns ``None`` on success, or the error message on failure. The caller decides
+    how to surface it — previously this swallowed the exception, which left the map
+    silently missing its most important layer with no way to tell why.
+    """
     try:
         map_id = image.getMapId(vis_params)
+        tile_url = _tile_url(map_id)
         folium.raster_layers.TileLayer(
-            tiles=map_id["tile_fetcher"].url_format,
+            tiles=tile_url,
             attr="Google Earth Engine",
             name=name,
             overlay=True,
             control=True,
+            show=True,
             opacity=opacity,
         ).add_to(fmap)
-    except Exception as exc:  # noqa: BLE001 — a missing layer must not blank the map
-        logger.warning("Could not add EE layer %r: %s", name, exc)
+        return None
+    except Exception as exc:  # noqa: BLE001 — reported to the caller, not swallowed
+        logger.error("Could not add EE layer %r: %s", name, exc)
+        return str(exc)
+
+
+def _tile_url(map_id) -> str:
+    """Extract the XYZ tile URL from a getMapId result.
+
+    The return shape of ``getMapId`` has shifted across earthengine-api releases: newer
+    builds expose ``map_id['tile_fetcher'].url_format``, some a bare ``tile_fetcher``
+    string, older ones only a ``mapid`` (with optional ``token``) that has to be
+    assembled into the tiles endpoint. Handle all three rather than assume one.
+    """
+    if not isinstance(map_id, dict):
+        return getattr(map_id, "url_format", str(map_id))
+
+    fetcher = map_id.get("tile_fetcher")
+    if fetcher is not None:
+        return getattr(fetcher, "url_format", str(fetcher))
+
+    mapid = map_id.get("mapid", "")
+    token = map_id.get("token", "")
+    if token:
+        return (f"https://earthengine.googleapis.com/map/{mapid}/"
+                "{z}/{x}/{y}?token=" + token)
+    return f"https://earthengine.googleapis.com/v1/{mapid}/tiles/{{z}}/{{x}}/{{y}}"
 
 
 def build_map(
     aoi,
     transition_image=None,
-    basemap: str = "Dark",
+    basemap: str = "Satellite",
     show_reforestation_only: bool = False,
     opacity: float = 0.82,
-) -> folium.Map:
-    """Build the main map: basemap, AOI outline, and the transition raster.
+) -> tuple[folium.Map, Optional[str]]:
+    """Build the main map and report whether the transition raster loaded.
+
+    Returns ``(map, error)`` where ``error`` is ``None`` on success or the reason the
+    Hansen transition layer could not be added. The caller shows the error so an empty
+    map is never a silent mystery.
 
     Parameters
     ----------
@@ -74,13 +110,26 @@ def build_map(
     lon, lat = aoi.centroid
     base = BASEMAPS.get(basemap, BASEMAPS["Satellite"])
 
-    fmap = folium.Map(
-        location=[lat, lon],
-        zoom_start=12,
-        tiles=base["tiles"],
-        attr=base["attr"],
-        control_scale=True,
-    )
+    # tiles=None + an explicit named TileLayer, so LayerControl shows a clean basemap
+    # name ("Satellite") instead of the raw tile URL.
+    fmap = folium.Map(location=[lat, lon], zoom_start=12, tiles=None, control_scale=True)
+    folium.TileLayer(
+        tiles=base["tiles"], attr=base["attr"] or basemap, name=basemap,
+        control=True, overlay=False,
+    ).add_to(fmap)
+
+    error: Optional[str] = None
+    if transition_image is not None:
+        from src.hansen import reforestation_mask, transition_vis  # noqa: PLC0415
+
+        image = transition_image
+        layer_name = "Hansen transitions"
+        if show_reforestation_only:
+            image = transition_image.updateMask(reforestation_mask(transition_image))
+            layer_name = "Reforestation candidates"
+
+        styled, vis = transition_vis(image)
+        error = _add_ee_layer(fmap, styled, vis, layer_name, opacity)
 
     folium.GeoJson(
         aoi.gdf.to_json(),
@@ -90,22 +139,12 @@ def build_map(
         },
     ).add_to(fmap)
 
-    if transition_image is not None:
-        from src.hansen import reforestation_mask, visualization_params  # noqa: PLC0415
-
-        image = transition_image
-        layer_name = "Hansen transitions"
-        if show_reforestation_only:
-            image = transition_image.updateMask(reforestation_mask(transition_image))
-            layer_name = "Reforestation candidates"
-
-        _add_ee_layer(fmap, image, visualization_params(), layer_name, opacity)
-
     minx, miny, maxx, maxy = aoi.bounds
     fmap.fit_bounds([[miny, minx], [maxy, maxx]])
 
-    folium.LayerControl(collapsed=True).add_to(fmap)
-    return fmap
+    # Expanded, so the transition layer toggle is visible at a glance.
+    folium.LayerControl(collapsed=False).add_to(fmap)
+    return fmap, error
 
 
 def legend_html(reforestation_only: bool = False) -> str:

@@ -307,27 +307,28 @@ def load_aoi(data: bytes, filename: str, cfg: AOIConfig) -> AOI:
 
 # Bundled demo boundary, resolved relative to this module so it works from any
 # working directory and on Streamlit Cloud (which clones the whole repo).
-DEMO_AOI_PATH = Path(__file__).resolve().parent.parent / "tests" / "ARG_envelope.geojson"
+DEMO_AOI_PATH = Path(__file__).resolve().parent.parent / "tests" / "COL_envelope.geojson"
 
-# Extent of the bundled file, inlined so the demo still works if the file is absent
-# from a partial deploy. Keep in sync with tests/ARG_envelope.geojson.
+# Bounding box of the bundled file, inlined so the demo still works if the file is
+# absent from a partial deploy. The file itself is a multi-polygon; this box just
+# needs to land in the same place. Keep in sync with tests/COL_envelope.geojson.
 _DEMO_FALLBACK_COORDS = [
-    (-64.669534, -23.632389), (-64.503881, -23.632389),
-    (-64.503881, -23.484167), (-64.669534, -23.484167), (-64.669534, -23.632389),
+    (-75.135, 10.553), (-75.066, 10.553),
+    (-75.066, 10.597), (-75.135, 10.597), (-75.135, 10.553),
 ]
-_DEMO_NAME = "Demo AOI — Salta/Jujuy, Argentina"
+_DEMO_NAME = "Demo AOI - Bolivar, Colombia"
 
 
 def demo_aoi(cfg: Optional[AOIConfig] = None) -> AOI:
     """A small built-in AOI so the app is explorable before anyone uploads a file.
 
-    A ~28,000 ha envelope in the subtropical dry forest of Salta/Jujuy, northern
-    Argentina (~23.6 degrees S, 64.6 degrees W). It sits inside GEDI coverage and over
-    real Hansen forest change, so every analysis phase returns something.
+    A ~1,750 ha envelope near Cartagena, Bolivar, northern Colombia (~10.6 degrees N,
+    75.1 degrees W). It sits inside GEDI coverage and over real Hansen forest change,
+    so every analysis phase returns something.
 
-    Loads the bundled ``tests/ARG_envelope.geojson`` when present, and falls back to an
-    inline polygon of the same extent if the file is missing — so a partial deploy
-    cannot break the demo button.
+    Loads the bundled ``tests/COL_envelope.geojson`` when present, and falls back to an
+    inline box of the same extent if the file is missing — so a partial deploy cannot
+    break the demo button.
     """
     cfg = cfg or AOIConfig()
 
@@ -343,4 +344,4 @@ def demo_aoi(cfg: Optional[AOIConfig] = None) -> AOI:
         {"name": [_DEMO_NAME]},
         geometry=[Polygon(_DEMO_FALLBACK_COORDS)], crs="EPSG:4326",
     )
-    return build_aoi(gdf, cfg, source_name="ARG_envelope.geojson")
+    return build_aoi(gdf, cfg, source_name="COL_envelope.geojson")

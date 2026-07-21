@@ -28,8 +28,9 @@ GEDI_LAT_LIMIT = 51.6
 
 # Hansen Global Forest Change — the ONLY forest-transition source in this app, so
 # that results are globally consistent and reproducible anywhere on Earth.
-HANSEN_ASSET_DEFAULT = "UMD/hansen/global_forest_change_2024_v1_12"
+HANSEN_ASSET_DEFAULT = "UMD/hansen/global_forest_change_2025_v1_13"
 HANSEN_ASSET_CHOICES = [
+    "UMD/hansen/global_forest_change_2025_v1_13",
     "UMD/hansen/global_forest_change_2024_v1_12",
     "UMD/hansen/global_forest_change_2023_v1_11",
     "UMD/hansen/global_forest_change_2022_v1_10",
@@ -57,7 +58,7 @@ CLASS_LABELS: Dict[int, str] = {
 
 # Tuned for the dark theme: hue-preserving but brightened so each class reads both on
 # the near-black chart ground and on the map's dark basemap. These feed the legend,
-# the chart series, and the Earth Engine map raster palette (via visualization_params),
+# the chart series, and the Earth Engine map raster palette (via transition_vis),
 # so all three stay in sync.
 CLASS_COLORS: Dict[int, str] = {
     STABLE_FOREST: "#2E9E54",      # forest green

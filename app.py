@@ -322,13 +322,20 @@ def _tab_land_cover(result: pipeline.AnalysisResult) -> None:
 
         from streamlit_folium import st_folium  # noqa: PLC0415
 
-        fmap = maps.build_map(
+        fmap, map_error = maps.build_map(
             result.aoi, transitions.image, basemap, reforestation_only
         )
         st.caption(
             "White dashed outline is your AOI. Colored fill is the Hansen transition "
             "class per pixel (see legend below)."
         )
+        if map_error:
+            st.warning(
+                "The transition raster could not be drawn on the map (the analysis "
+                "numbers on the right are unaffected).\n\n"
+                f"```\n{map_error}\n```",
+                icon="🗺️",
+            )
         st_folium(fmap, height=520, width=None, returned_objects=[])
         st.markdown(maps.legend_html(reforestation_only), unsafe_allow_html=True)
 
