@@ -274,14 +274,22 @@ def analyze(aoi_geometry: "ee.Geometry", cfg: HansenConfig) -> TransitionResult:
 # Visualisation & export helpers
 # ---------------------------------------------------------------------------
 
-def visualization_params() -> dict:
-    """Palette for ``ee.Image.getMapId``. Order follows the sorted class codes."""
+def transition_vis(image: "ee.Image"):
+    """Return ``(styled_image, vis_params)`` ready for ``ee.Image.getMapId``.
+
+    The class codes (11, 12, 21, 22) are **non-contiguous**, so a naive
+    ``{min: 11, max: 22, palette: [4 colors]}`` makes Earth Engine stretch the range
+    linearly across the palette and mis-colours the middle classes: value 12 (loss)
+    lands on the forest colour and value 21 (gain) on the non-forest colour. Remapping
+    the four values to a contiguous 0-3 index gives every class its exact colour.
+    """
     from config.defaults import CLASS_COLORS
 
-    codes = sorted(ALL_CLASSES)
-    return {
-        "min": min(codes),
-        "max": max(codes),
+    codes = sorted(ALL_CLASSES)                       # [11, 12, 21, 22]
+    styled = image.remap(codes, list(range(len(codes)))).toByte()
+    return styled, {
+        "min": 0,
+        "max": len(codes) - 1,
         "palette": [CLASS_COLORS[c].lstrip("#") for c in codes],
     }
 

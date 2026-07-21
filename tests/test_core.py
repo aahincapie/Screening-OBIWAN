@@ -508,8 +508,13 @@ def test_demo_aoi_file_is_present_and_valid():
     assert abs(miny) <= 51.6 and abs(maxy) <= 51.6
 
 
-def test_demo_fallback_matches_bundled_file():
-    """The inline fallback must stay in sync with tests/ARG_envelope.geojson."""
+def test_demo_fallback_points_at_the_same_place():
+    """The inline fallback must land where the bundled demo file is.
+
+    The file is a multi-polygon and the fallback is its bounding box, so their areas
+    differ legitimately. Location is the invariant that matters: if the file moves, the
+    fallback must move with it, or a partial deploy would drop the demo somewhere else.
+    """
     import geopandas as gpd  # noqa: PLC0415
     from shapely.geometry import Polygon  # noqa: PLC0415
     from src import aoi  # noqa: PLC0415
@@ -517,9 +522,10 @@ def test_demo_fallback_matches_bundled_file():
     gdf = aoi.read_aoi_bytes(aoi.DEMO_AOI_PATH.read_bytes(), aoi.DEMO_AOI_PATH.name, max_mb=1.0)
     fallback = gpd.GeoSeries([Polygon(aoi._DEMO_FALLBACK_COORDS)], crs="EPSG:4326")
 
-    area_file = gdf.to_crs(aoi.EQUAL_AREA_CRS).area.sum() / 1e4
-    area_fallback = fallback.to_crs(aoi.EQUAL_AREA_CRS).area.sum() / 1e4
-    assert abs(area_file - area_fallback) < 100, (
+    file_c = gdf.to_crs(aoi.EQUAL_AREA_CRS).union_all().centroid
+    fb_c = fallback.to_crs(aoi.EQUAL_AREA_CRS).iloc[0].centroid
+    metres_apart = ((file_c.x - fb_c.x) ** 2 + (file_c.y - fb_c.y) ** 2) ** 0.5
+    assert metres_apart < 2000, (
         "inline fallback has drifted from the bundled demo file — update "
-        "_DEMO_FALLBACK_COORDS in src/aoi.py to match tests/ARG_envelope.geojson"
+        "_DEMO_FALLBACK_COORDS in src/aoi.py to match tests/COL_envelope.geojson"
     )
