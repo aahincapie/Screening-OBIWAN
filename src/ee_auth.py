@@ -157,8 +157,13 @@ def try_service_account(project_id: str) -> AuthState:
         ee.Initialize(creds, project=project_id or info.get("project_id", ""),
                       opt_url=HIGH_VOLUME_ENDPOINT)
         ee.Number(1).getInfo()
+        # Carry the credentials on the state. activate() re-binds the process-global
+        # session before every run, and without them it would fall back to a
+        # credential-less ee.Initialize() that fails on any host with no stored
+        # credentials — which is every shared deployment.
         return AuthState(True, project_id or info.get("project_id", ""),
-                         "service_account", "Signed in with a service account.")
+                         "service_account", "Signed in with a service account.",
+                         credentials=creds)
     except Exception as exc:  # noqa: BLE001
         logger.warning("Service-account init failed: %s", exc)
         return AuthState(False, project_id, "service_account", str(exc))
@@ -378,9 +383,20 @@ def activate(state: AuthState) -> bool:
 
     try:
         if state.credentials is not None:
+            # Fast path: OAuth or service-account credentials cached on the state.
             _initialize_with(state.credentials, state.project_id)
-        else:
-            _initialize(state.project_id)
+            return True
+
+        # No cached credentials. A service-account deployment can always re-derive
+        # them from the environment — do that rather than call ee.Initialize() with
+        # no credentials, which fails on any host that never ran `earthengine
+        # authenticate` (i.e. every shared deployment).
+        if has_service_account():
+            return try_service_account(state.project_id).initialized
+
+        # Local stored-credential session: ee.Initialize(project=...) picks up the
+        # persisted credentials file on disk.
+        _initialize(state.project_id)
         return True
     except Exception as exc:  # noqa: BLE001
         logger.warning("Could not re-activate the Earth Engine session: %s", exc)

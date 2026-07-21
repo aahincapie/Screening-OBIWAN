@@ -455,6 +455,45 @@ def test_describe_failure_still_maps_registration():
 # parses to a single polygon and that the inline fallback still describes the same
 # place, so the two cannot silently drift apart.
 
+def test_activate_dispatch(monkeypatch):
+    """activate() must never call the credential-less _initialize() when the session
+    is a service account. That regression logged users out mid-run on Streamlit Cloud
+    with 'session expired', because ee.Initialize() with no credentials fails on a host
+    that never ran `earthengine authenticate`."""
+    from src import ee_auth
+
+    calls = []
+    monkeypatch.setattr(ee_auth, "_initialize_with",
+                        lambda creds, pid: calls.append(("with_creds", pid)))
+    monkeypatch.setattr(ee_auth, "_initialize",
+                        lambda pid: calls.append(("no_creds", pid)))
+    monkeypatch.setattr(ee_auth, "try_service_account",
+                        lambda pid: (calls.append(("service_account", pid)),
+                                     ee_auth.AuthState(True, pid, "service_account"))[1])
+
+    # 1. Cached credentials -> fast path, never the credential-less call.
+    calls.clear()
+    state = ee_auth.AuthState(True, "ee-geocaptain", "service_account", credentials=object())
+    assert ee_auth.activate(state) is True
+    assert calls == [("with_creds", "ee-geocaptain")]
+
+    # 2. No cached creds but a service account is configured -> re-derive it,
+    #    NOT the credential-less _initialize().
+    calls.clear()
+    monkeypatch.setattr(ee_auth, "has_service_account", lambda: True)
+    state = ee_auth.AuthState(True, "ee-geocaptain", "service_account", credentials=None)
+    assert ee_auth.activate(state) is True
+    assert calls == [("service_account", "ee-geocaptain")]
+    assert ("no_creds", "ee-geocaptain") not in calls
+
+    # 3. Local stored session, no service account -> the on-disk credential path.
+    calls.clear()
+    monkeypatch.setattr(ee_auth, "has_service_account", lambda: False)
+    state = ee_auth.AuthState(True, "local-proj", "stored", credentials=None)
+    assert ee_auth.activate(state) is True
+    assert calls == [("no_creds", "local-proj")]
+
+
 def test_demo_aoi_file_is_present_and_valid():
     import geopandas as gpd  # noqa: PLC0415
     from src import aoi  # noqa: PLC0415
